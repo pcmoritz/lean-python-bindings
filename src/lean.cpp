@@ -23,8 +23,44 @@
 #include "library/defeq_canonizer.h"
 #include "library/tactic/tactic_state.h"
 #include "library/compiler/vm_compiler.h"
+#include "library/vm/vm.h"
+#include "library/vm/vm_expr.h"
 
 namespace py = pybind11;
+
+lean::vm_obj run_tactic_core(lean::tactic_state const & ts, lean::expr const & tactic,
+			     lean::level_param_names const & ls, std::vector<lean::vm_obj> const & _args) {
+  lean::name fn_name("_main");
+  lean::type_context tc(ts.env(), lean::transparency_mode::All);
+  lean::expr type = tc.infer(tactic);
+
+  lean::environment new_env = ts.env();
+  bool use_conv_opt   = true;
+  bool is_trusted     = false;
+  lean::certified_declaration cd = lean::check(new_env, mk_definition(new_env, fn_name, ls, type, tactic, use_conv_opt, is_trusted));
+  new_env = new_env.add(cd);
+  new_env = lean::vm_compile(new_env, new_env.get(fn_name));
+
+  lean::vm_state vms(new_env, ts.get_options());
+
+  lean::buffer<lean::vm_obj> args;
+  args.push_back(to_obj(ts));
+
+  for_each (_args.rbegin(), _args.rend(), [&](lean::vm_obj const & arg) {
+      args.push_back(arg);
+    });
+  std::cout << "about to compute arity..." << std::endl;
+
+  unsigned arity = vms.get_decl(fn_name)->get_arity();
+  std::cout << "... == " << arity << std::endl;
+  
+  // if (arity != args.size()) {
+  //   throw lean::exception(lean::sstream() << "cannot evaluate function: " << args.size()
+  // 		    << " arguments given but expected " << arity);
+  // }
+    std::cout << arity << " == " << args.size() << std::endl;
+  return vms.invoke(fn_name, args.size(), args.data());
+}
 
 PYBIND11_PLUGIN(lean) {
   py::module m("lean", "pybind11 lean plugin");
@@ -390,39 +426,34 @@ PYBIND11_PLUGIN(lean) {
     .def("goals", &lean::tactic_state::goals)
     ;
 
-  py::class_<lean::optional<lean::tactic_state> >(m, "optional_tactic_state")
+  py::class_<lean::vm_obj>(m, "vm_obj")
     .def(py::init<>())
-    .def(py::init<lean::tactic_state>())
-    .def("is_some", [&](lean::optional<lean::tactic_state> const & self) { return self; })
-    .def("value", [&](lean::optional<lean::tactic_state> const & self) { return self.value(); })
+    ;
+
+  py::class_<lean::optional<std::pair<lean::vm_obj, lean::tactic_state> > >(m, "optional_tactic_result")
+    .def(py::init<>())
+    .def(py::init<std::pair<lean::vm_obj const &, lean::tactic_state const &> >())
+    .def("is_some", [&](lean::optional<std::pair<lean::vm_obj, lean::tactic_state> > const & self) { return self; })
+    .def("value", [&](lean::optional<std::pair<lean::vm_obj, lean::tactic_state> > const & self) { return self.value(); })
   ;
 
+  m.def("to_expr", [&](lean::vm_obj const & e) { return lean::to_expr(e); });
+  m.def("to_obj", [&](lean::expr const & e) { return lean::to_obj(e); });  
+  
   /*
   py::class_<lean::vm_state>(m, "vm_state")
     .def(py::init<lean::environment const &, lean::options const &>())
     ;
   */
   
-  m.def("run_tactic", [&](lean::tactic_state const & ts, lean::expr const & tactic, lean::level_param_names const & ls) {
-      lean::name fn_name("_main");
-      lean::type_context tc(ts.env(), lean::transparency_mode::All);
-      lean::expr type = tc.infer(tactic);
-
-      lean::environment new_env = ts.env();
-      bool use_conv_opt   = true;
-      bool is_trusted     = false;
-      lean::certified_declaration cd = lean::check(new_env, mk_definition(new_env, fn_name, ls, type, tactic, use_conv_opt, is_trusted));
-      new_env = new_env.add(cd);
-      new_env = lean::vm_compile(new_env, new_env.get(fn_name));
-
-      lean::vm_state vms(new_env, ts.get_options());
-      lean::vm_obj r = vms.invoke(fn_name, to_obj(ts));
-      
-      // TODO(dhs): return more, including actual return value (may need to take type as arg) and error message
+  m.def("run_tactic", [&](lean::tactic_state const & ts, lean::expr const & tactic,
+			  lean::level_param_names const & ls, std::vector<lean::vm_obj> const & args) {
+      lean::vm_obj r = run_tactic_core(ts, tactic, ls, args);
       if (lean::tactic::is_result_success(r)) {
-	return lean::optional<lean::tactic_state>(lean::tactic::to_state(lean::tactic::get_result_state(r)));
+	return lean::optional<std::pair<lean::vm_obj, lean::tactic_state> >(lean::mk_pair(lean::tactic::get_result_value(r),
+											  lean::tactic::to_state(lean::tactic::get_result_state(r))));
       } else {
-	return lean::optional<lean::tactic_state>();
+	return lean::optional<std::pair<lean::vm_obj, lean::tactic_state> >();
       }
     });
 

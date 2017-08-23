@@ -20,8 +20,22 @@ tstate = lean.tactic_state(env, options, decl_name, mctx, goals, goal, deq_state
 
 ls = lean.list_name()
 
-tactic = lean.mk_constant(lean.name(lean.name("tactic"), "intro1"))
+tac_intro1 = lean.mk_constant(lean.name(lean.name("tactic"), "intro1"))
 
-new_tstate = lean.run_tactic(tstate, tactic, ls)
+print "running first one"
+result1 = lean.run_tactic(tstate, tac_intro1, ls, [])
 
-print new_tstate
+print "first one ran"
+tstate2 = result1.value()[1]
+new_goal = tstate2.goals().head()
+
+# TODO(dhs): support passing arguments to run_tactic
+
+tac_infer_type = lean.mk_constant(lean.name(lean.name("tactic"), "infer_type"))
+
+result2 = lean.run_tactic(tstate2, tac_infer_type, ls, [lean.to_obj(new_goal)])
+ty = result2.value()[0]
+
+print "should be 'false':"
+print lean.to_expr(ty)
+
