@@ -386,6 +386,8 @@ PYBIND11_PLUGIN(lean) {
     .def(py::init<lean::environment const &, lean::options const &, lean::name const &,
 	 lean::metavar_context const &, lean::list<lean::expr> const &, lean::expr const &,
 	 lean::defeq_can_state const &, lean::tactic_user_state const &>())
+
+    .def("goals", &lean::tactic_state::goals)
     ;
 
   py::class_<lean::optional<lean::tactic_state> >(m, "optional_tactic_state")
