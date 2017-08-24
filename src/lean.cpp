@@ -49,17 +49,16 @@ lean::vm_obj run_tactic_core(lean::tactic_state const & ts, lean::expr const & t
   for_each (_args.rbegin(), _args.rend(), [&](lean::vm_obj const & arg) {
       args.push_back(arg);
     });
-  std::cout << "about to compute arity..." << std::endl;
 
   unsigned arity = vms.get_decl(fn_name)->get_arity();
-  std::cout << "... == " << arity << std::endl;
   
   // if (arity != args.size()) {
   //   throw lean::exception(lean::sstream() << "cannot evaluate function: " << args.size()
   // 		    << " arguments given but expected " << arity);
   // }
     std::cout << arity << " == " << args.size() << std::endl;
-  return vms.invoke(fn_name, args.size(), args.data());
+    //  return vms.invoke(fn_name, args.size(), args.data());
+    return vms.invoke(fn_name, to_obj(ts));
 }
 
 PYBIND11_PLUGIN(lean) {
