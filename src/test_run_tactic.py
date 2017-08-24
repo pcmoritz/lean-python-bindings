@@ -1,11 +1,11 @@
 import gc
 import lean
 
+lean.initialize()
+
 def run():
   env = lean.import_modules(["/usr/local/lib/lean/library"], [lean.name("init")], 100000)
   options = lean.options()
-
-#  vms = lean.vm_state(env, options)
 
   decl_name = lean.name("my_theorem")
 
@@ -26,12 +26,13 @@ def run():
 
   tac_intro1 = lean.mk_constant(lean.name(lean.name("tactic"), "intro1"))
 
-#  r = lean.run_tactic(vms, tstate, tac_intro1, ls, [])
+  print "about to run tactic..."
+  r = lean.run_tactic(tstate, tac_intro1, ls)
+  print "run_tactic returned"
   return ()
 
-print "about to run...",
 vms = run()
-print "done"
+print "function returned"
 
 #print "result: ", result1.is_some()
 
