@@ -1,41 +1,72 @@
+import gc
 import lean
 
-env = lean.import_modules(["/usr/local/lib/lean/library"], [lean.name("init")], 100000)
+def run():
+  env = lean.import_modules(["/usr/local/lib/lean/library"], [lean.name("init")], 100000)
+  options = lean.options()
 
-options = lean.options()
-decl_name = lean.name("my_theorem")
+#  vms = lean.vm_state(env, options)
 
-lctx = lean.local_context()
-mctx = lean.metavar_context()
+  decl_name = lean.name("my_theorem")
 
-goal_type = lean.mk_arrow(lean.mk_constant(lean.name("true")), lean.mk_constant(lean.name("false")))
+  lctx = lean.local_context()
+  mctx = lean.metavar_context()
 
-goal = mctx.mk_metavar_decl(lctx, goal_type)
-goals = lean.list_expr(goal, lean.list_expr()) # TODO(dhs): python lists
+  goal_type = lean.mk_arrow(lean.mk_constant(lean.name("true")), lean.mk_constant(lean.name("false")))
 
-deq_state = lean.defeq_can_state()
-tustate = lean.tactic_user_state()
+  goal = mctx.mk_metavar_decl(lctx, goal_type)
+  goals = lean.list_expr(goal, lean.list_expr()) # TODO(dhs): python lists
 
-tstate = lean.tactic_state(env, options, decl_name, mctx, goals, goal, deq_state, tustate)
+  deq_state = lean.defeq_can_state()
+  tustate = lean.tactic_user_state()
 
-ls = lean.list_name()
+  tstate = lean.tactic_state(env, options, decl_name, mctx, goals, goal, deq_state, tustate)
 
-tac_intro1 = lean.mk_constant(lean.name(lean.name("tactic"), "intro1"))
+  ls = lean.list_name()
 
-print "running first one"
-result1 = lean.run_tactic(tstate, tac_intro1, ls, [])
+  tac_intro1 = lean.mk_constant(lean.name(lean.name("tactic"), "intro1"))
 
-print "first one ran"
-tstate2 = result1.value()[1]
-new_goal = tstate2.goals().head()
+#  r = lean.run_tactic(vms, tstate, tac_intro1, ls, [])
+  return ()
 
-# TODO(dhs): support passing arguments to run_tactic
+print "about to run...",
+vms = run()
+print "done"
 
-tac_infer_type = lean.mk_constant(lean.name(lean.name("tactic"), "infer_type"))
+#print "result: ", result1.is_some()
 
-result2 = lean.run_tactic(tstate2, tac_infer_type, ls, [lean.to_obj(new_goal)])
-ty = result2.value()[0]
+#gc.collect()
 
-print "should be 'false':"
-print lean.to_expr(ty)
+#print "result (again): ", result1.is_some()
+
+#gc.collect()
+
+#print "done1"
+
+gc.collect()
+
+print "done2"
+
+# tstate2 = result1.value()[1]
+
+# print "got resulting tactic state"
+
+# new_goal = tstate2.goals().head()
+
+# print "got new goal"
+
+# # TODO(dhs): support passing arguments to run_tactic
+
+# tac_infer_type = lean.mk_constant(lean.name(lean.name("tactic"), "infer_type"))
+
+# result2 = lean.run_tactic(tstate2, tac_infer_type, ls, [lean.to_obj(new_goal)])
+
+# print "second one ran"
+
+# ty = result2.value()[0]
+
+# print "got inferred type"
+
+# print "should be 'false':"
+# print ty
 

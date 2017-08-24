@@ -1,5 +1,7 @@
 #include <pybind11/pybind11.h>
+#include <pybind11/pytypes.h>
 #include <pybind11/stl.h>
+#include <pybind11/functional.h>
 
 #include <iostream> // TODO(dhs): remove
 #include <sstream>
@@ -46,9 +48,10 @@ lean::vm_obj run_tactic_core(lean::tactic_state const & ts, lean::expr const & t
   lean::buffer<lean::vm_obj> args;
   args.push_back(to_obj(ts));
 
-  for_each (_args.rbegin(), _args.rend(), [&](lean::vm_obj const & arg) {
-      args.push_back(arg);
-    });
+  // TODO(dhs): uncomment
+  //  for_each (_args.rbegin(), _args.rend(), [&](lean::vm_obj const & arg) {
+  //      args.push_back(arg);
+  //    });
 
   unsigned arity = vms.get_decl(fn_name)->get_arity();
   
@@ -58,7 +61,10 @@ lean::vm_obj run_tactic_core(lean::tactic_state const & ts, lean::expr const & t
   // }
     std::cout << arity << " == " << args.size() << std::endl;
     //  return vms.invoke(fn_name, args.size(), args.data());
-    return vms.invoke(fn_name, to_obj(ts));
+
+    lean::vm_obj r = vms.invoke(fn_name, to_obj(ts));
+    std::cout << "tactic ran" << std::endl;
+    return r;
 }
 
 PYBIND11_PLUGIN(lean) {
@@ -421,8 +427,8 @@ PYBIND11_PLUGIN(lean) {
     .def(py::init<lean::environment const &, lean::options const &, lean::name const &,
 	 lean::metavar_context const &, lean::list<lean::expr> const &, lean::expr const &,
 	 lean::defeq_can_state const &, lean::tactic_user_state const &>())
-
-    .def("goals", &lean::tactic_state::goals)
+    .def(py::init<lean::tactic_state const &>())
+    .def("goals", &lean::tactic_state::goals, py::return_value_policy::reference)
     ;
 
   py::class_<lean::vm_obj>(m, "vm_obj")
@@ -432,29 +438,54 @@ PYBIND11_PLUGIN(lean) {
   py::class_<lean::optional<std::pair<lean::vm_obj, lean::tactic_state> > >(m, "optional_tactic_result")
     .def(py::init<>())
     .def(py::init<std::pair<lean::vm_obj const &, lean::tactic_state const &> >())
-    .def("is_some", [&](lean::optional<std::pair<lean::vm_obj, lean::tactic_state> > const & self) { return self; })
+    .def("is_some", [&](lean::optional<std::pair<lean::vm_obj, lean::tactic_state> > const & self) { return static_cast<bool>(self); })
     .def("value", [&](lean::optional<std::pair<lean::vm_obj, lean::tactic_state> > const & self) { return self.value(); })
   ;
 
+  m.def("mk_vm_unit", [&]() { return lean::mk_vm_unit(); });
+  m.def("to_star", [&](lean::vm_obj const & s) { return py::tuple(); });    
   m.def("to_expr", [&](lean::vm_obj const & e) { return lean::to_expr(e); });
   m.def("to_obj", [&](lean::expr const & e) { return lean::to_obj(e); });  
   
-  /*
   py::class_<lean::vm_state>(m, "vm_state")
-    .def(py::init<lean::environment const &, lean::options const &>())
+    .def(py::init<lean::environment const &, lean::options const &>(), py::return_value_policy::reference)
     ;
-  */
-  
-  m.def("run_tactic", [&](lean::tactic_state const & ts, lean::expr const & tactic,
-			  lean::level_param_names const & ls, std::vector<lean::vm_obj> const & args) {
-      lean::vm_obj r = run_tactic_core(ts, tactic, ls, args);
-      if (lean::tactic::is_result_success(r)) {
-	return lean::optional<std::pair<lean::vm_obj, lean::tactic_state> >(lean::mk_pair(lean::tactic::get_result_value(r),
-											  lean::tactic::to_state(lean::tactic::get_result_state(r))));
-      } else {
-	return lean::optional<std::pair<lean::vm_obj, lean::tactic_state> >();
-      }
-    });
+
+  m.def("run_tactic", [&](lean::vm_state & vms, lean::tactic_state const & ts, lean::expr const & tactic,
+			  lean::level_param_names const & ls, std::vector<lean::vm_obj> const & _args) {
+	  lean::name fn_name("_main");
+	  lean::type_context tc(ts.env(), lean::transparency_mode::All);
+	  lean::expr type = tc.infer(tactic);
+
+	  lean::environment new_env = ts.env();
+	  bool use_conv_opt   = true;
+	  bool is_trusted     = false;
+	  lean::certified_declaration cd = lean::check(new_env, mk_definition(new_env, fn_name, ls, type, tactic, use_conv_opt, is_trusted));
+	  new_env = new_env.add(cd);
+	  new_env = lean::vm_compile(new_env, new_env.get(fn_name));
+
+	  vms.update_env(new_env);
+
+	  lean::buffer<lean::vm_obj> args;
+	  args.push_back(lean::to_obj(ts));
+
+	  for_each (_args.rbegin(), _args.rend(), [&](lean::vm_obj const & arg) {
+	  	      args.push_back(arg);
+	    });
+	  
+	  lean::vm_obj r = vms.invoke(fn_name, args.size(), args.data());
+	  vms.update_env(ts.env());
+
+	  if (lean::tactic::is_result_success(r)) {
+	    std::cout << "success" << std::endl;	    
+	    return lean::optional<std::pair<lean::vm_obj, lean::tactic_state> >(lean::mk_pair(lean::tactic::get_result_value(r),
+											    lean::tactic::to_state(lean::tactic::get_result_state(r))));
+	  } else {
+	    std::cout << "failure" << std::endl;	    
+	    return lean::optional<std::pair<lean::vm_obj, lean::tactic_state> >();
+	  }
+
+	}, py::return_value_policy::copy);
 
 // TODO(dhs): current spot
 // need tactic_state and its dependencies
