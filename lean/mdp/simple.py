@@ -37,15 +37,14 @@ class SimpleLeanMDP(object):
         r = lean.run_tactic(self.state, tactic, ls, args)
         return r.value() if r.is_some() else None
 
-
     def print_goals(self):
         context = self.state.mctx()
         metavar_decls = [context.get_metavar_decl(g) for g in self.state.goals()]
         for i, metavar_decl in enumerate(metavar_decls):
             print("goal " + str(i) + ": " + str(metavar_decl.get_type()))
 
-    def actions(self):
+    def act(self, tactic, args):
         """
         Return list of possible actions.
         """
-        return self.state
+        result, self.state = self.run_tactic(tactic, args)
